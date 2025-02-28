@@ -19,6 +19,7 @@ package org.b3log.siyuan;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ContentValues;
 import android.content.Intent;
@@ -88,7 +89,7 @@ import mobile.Mobile;
  * 主程序.
  *
  * @author <a href="https://88250.b3log.org">Liang Ding</a>
- * @version 1.1.0.4, Nov 6, 2024
+ * @version 1.1.0.7, Feb 5, 2025
  * @since 1.0.0
  */
 public class MainActivity extends AppCompatActivity implements com.blankj.utilcode.util.Utils.OnAppStatusChangedListener {
@@ -139,7 +140,7 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
 
         // 使用 Chromium 调试 WebView
         if (Utils.isDebugPackageAndMode(this)) {
-            WebView.setWebContentsDebuggingEnabled(true);
+            this.setWebViewDebuggable(true);
         }
 
         // 注册工具栏显示/隐藏跟随软键盘状态
@@ -178,6 +179,22 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
                         return false;
                     }
 
+                    if (ContextCompat.checkSelfPermission(MainActivity.this, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                        AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+                        builder.setTitle("权限申请 / Permission Request");
+                        builder.setMessage("需要相机权限以拍摄照片并插入到当前文档中 / Camera permission is required to take photos and insert them into the current document");
+                        builder.setPositiveButton("同意/Agree", (dialog, which) -> {
+                            ActivityCompat.requestPermissions(MainActivity.this, new String[]{android.Manifest.permission.CAMERA}, REQUEST_CAMERA);
+                        });
+                        builder.setNegativeButton("拒绝/Decline", (dialog, which) -> {
+                            Toast.makeText(MainActivity.this, "权限已被拒绝 / Permission denied", Toast.LENGTH_LONG).show();
+                            uploadMessage = null;
+                        });
+                        builder.setCancelable(false);
+                        builder.create().show();
+                        return true;
+                    }
+
                     final String[] permissions = {android.Manifest.permission.CAMERA};
                     if (!hasPermissions(permissions)) {
                         ActivityCompat.requestPermissions(MainActivity.this, permissions, REQUEST_CAMERA);
@@ -205,6 +222,12 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
                 request.grant(request.getResources());
             }
 
+        });
+
+        webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
+            final Uri uri = Uri.parse(url);
+            final Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+            startActivity(intent);
         });
 
         webView.setOnDragListener((v, event) -> {
@@ -469,12 +492,8 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
     private void initAppearance() {
         if (needUnzipAssets()) {
             bootLogo.setVisibility(View.VISIBLE);
-            // 不要进度条更平滑一些
-            //bootProgressBar.setVisibility(View.VISIBLE);
-            //bootDetailsText.setVisibility(View.VISIBLE);
 
-            final String dataDir = getFilesDir().getAbsolutePath();
-            final String appDir = dataDir + "/app";
+            final String appDir = getFilesDir().getAbsolutePath() + "/app";
             final File appVerFile = new File(appDir, "VERSION");
 
             setBootProgress("Clearing appearance...", 20);
@@ -539,7 +558,7 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
                 return;
             }
 
-            Toast.makeText(this, "Permission denied", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "权限已被拒绝 / Permission denied", Toast.LENGTH_LONG).show();
         }
 
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -615,17 +634,16 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
     }
 
     private boolean needUnzipAssets() {
-        final String dataDir = getFilesDir().getAbsolutePath();
-        final String appDir = dataDir + "/app";
+        final String appDir = getFilesDir().getAbsolutePath() + "/app";
         final File appDirFile = new File(appDir);
         appDirFile.mkdirs();
 
-        boolean ret = true;
         if (Utils.isDebugPackageAndMode(this)) {
             Log.i("boot", "always unzip assets in debug mode");
-            return ret;
+            return true;
         }
 
+        boolean ret = true;
         final File appVerFile = new File(appDir, "VERSION");
         if (appVerFile.exists()) {
             try {
@@ -695,6 +713,10 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
                 Toast.makeText(this, "Check WebView version failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
             }
         }
+    }
+
+    public void setWebViewDebuggable(final boolean debuggable) {
+        WebView.setWebContentsDebuggingEnabled(debuggable);
     }
 
     private static boolean syncing;
